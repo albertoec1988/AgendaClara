@@ -49,8 +49,8 @@ export function validate(p) {
   for(const [m,t] of Object.entries(p.priorities))check(ms.has(m)&&object(t)&&maybe(t.card,id=>ids.has(id))&&maybe(t.cap),'Prioridad mensual inválida.');
   const payments=p.payments===undefined?[]:p.payments;
   check(Array.isArray(payments),'Registro de pagos inválido.');
-  const accounts=p.debitAccounts??[],deposits=p.deposits??[];
-  check(Array.isArray(accounts)&&accounts.length<=30&&Array.isArray(deposits),'Cuentas de débito inválidas.');
+  const accounts=p.debitAccounts??[],deposits=p.deposits??[],outflows=p.debitOutflows??[],transfers=p.transfers??[];
+  check(Array.isArray(accounts)&&accounts.length<=30&&Array.isArray(deposits)&&Array.isArray(outflows)&&Array.isArray(transfers),'Cuentas de débito inválidas.');
   const accountIds=new Set(accounts.map(a=>a.id));
   check(accountIds.size===accounts.length,'Hay cuentas de débito repetidas.');
   check(p.incomeAccount==null||accountIds.has(p.incomeAccount),'Cuenta receptora del ingreso inválida.');
@@ -59,6 +59,16 @@ export function validate(p) {
   for(const d of deposits){
     check(ident(d.id)&&!depositIds.has(d.id)&&accountIds.has(d.account)&&isDate(d.date)&&amount(d.amount)&&d.amount>0&&['ach','variable'].includes(d.kind),'Depósito inválido.');
     depositIds.add(d.id);
+  }
+  const outflowIds=new Set();
+  for(const o of outflows){
+    check(ident(o.id)&&!outflowIds.has(o.id)&&accountIds.has(o.account)&&name(o.name)&&isDate(o.date)&&amount(o.amount)&&o.amount>0&&['planned','posted'].includes(o.status),'Salida de débito inválida.');
+    outflowIds.add(o.id);
+  }
+  const transferIds=new Set();
+  for(const move of transfers){
+    check(ident(move.id)&&!transferIds.has(move.id)&&accountIds.has(move.from)&&accountIds.has(move.to)&&move.from!==move.to&&isDate(move.date)&&amount(move.amount)&&move.amount>0&&['planned','posted'].includes(move.status),'Transferencia inválida.');
+    transferIds.add(move.id);
   }
   const paymentIds=new Set();
   for(const entry of payments){
@@ -104,14 +114,20 @@ export function debitProgress(plan,accountId) {
   const included=new Set(account.included);
   const deposits=(plan.deposits??[]).filter(d=>d.account===accountId&&!included.has('d:'+d.id));
   const payments=(plan.payments??[]).filter(p=>p.account===accountId&&!included.has('p:'+p.id));
-  const income=total(deposits,'amount'),out=total(payments,'amount');
-  return {income,out,balance:account.balance==null?null:account.balance+income-out};
+  const outflows=(plan.debitOutflows??[]).filter(o=>o.account===accountId&&!included.has('o:'+o.id));
+  const transfers=(plan.transfers??[]).filter(t=>(t.from===accountId||t.to===accountId)&&!included.has('t:'+t.id));
+  const posted=transfers.filter(t=>t.status==='posted'),planned=transfers.filter(t=>t.status==='planned');
+  const income=total(deposits,'amount')+total(posted.filter(t=>t.to===accountId),'amount');
+  const out=total(payments,'amount')+total(outflows.filter(o=>o.status==='posted'),'amount')+total(posted.filter(t=>t.from===accountId),'amount');
+  return {income,out,planned:total(outflows.filter(o=>o.status==='planned'),'amount')+total(planned.filter(t=>t.from===accountId),'amount'),balance:account.balance==null?null:account.balance+income-out};
 }
 export function compute(p) {
   const s=p.settings, weeks=[], statements=[], months=[], days=[], byDate=new Map(), byWeek=new Map();
   const period=dates(p.start,addDays(p.end,-1)), keys=[...new Set(period.map(monthOf))];
   const schedule=new Map(), previous=new Map();
   const ledger=paymentIndex(p.payments??[]);
+  const outflowsByDate=new Map();
+  for(const o of p.debitOutflows??[]){if(!outflowsByDate.has(o.date))outflowsByDate.set(o.date,[]);outflowsByDate.get(o.date).push(o);}
   let free=s.opening;
   for(const [mi,key] of keys.entries()){
     const list=p.weeks.filter(w=>monthOf(w.date)===key), count=list.length;
@@ -196,6 +212,8 @@ export function compute(p) {
       const card=p.cards.find(c=>c.id===entry.card);
       ev('card',card.name,entry.amount,{tab:'payment',id:entry.id,month:entry.period},entry.status==='credited'?'Pago acreditado':'Enviado · en tránsito');
     }
+    const otherOutflows=outflowsByDate.get(date)??[];
+    for(const entry of otherOutflows)ev('other',entry.name,entry.amount,{tab:'outflow',id:entry.id},entry.status==='posted'?'Salida realizada':'Salida prevista');
     const sends=schedule.get(date)??[];
     for(const a of sends)ev('card',a.card.name,a.pending,{tab:'dues',id:a.id,month:a.key},a.confirmed?'Mínimo pendiente':'Mínimo estimado');
     const required=total(sends,'cashMinimum'),spending=total(events.filter(e=>!['income','card'].includes(e.type)),'value');

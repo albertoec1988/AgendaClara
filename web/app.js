@@ -68,8 +68,8 @@ function sidebar(){const links=(a)=>a.map(([id,label,ic])=>'<a class="navlink '+
 function monthSelect(){return '<label class="monthsel">'+icon('calendar')+'<select aria-label="Mes de la vista" data-action="month">'+model.months.map(m=>'<option value="'+m.key+'" '+(m.key===month?'selected':'')+'>'+monthText(m.key)+'</option>').join('')+'</select></label>';}
 function title(name,sub,control=''){return '<div class="pagehead"><div><h1>'+esc(name)+'</h1><p>'+esc(sub)+'</p></div>'+control+'</div>';}
 function kpi(label,value,sub,ic,kind=''){return '<article class="kpi '+kind+'"><div class="klabel">'+icon(ic,17)+esc(label)+'</div><strong>'+esc(value)+'</strong><small>'+esc(sub)+'</small></article>';}
-function desc(type){return {income:'Ingreso',bill:'Servicio',card:'Tarjeta',rent:'Vivienda',food:'Comida',undated:'Otros gastos',extra:'Pago adicional'}[type];}
-const eventIcon={income:'down',rent:'home',bill:'receipt',card:'card',food:'bag',undated:'wallet',extra:'send'};
+function desc(type){return {income:'Ingreso',bill:'Servicio',card:'Tarjeta',rent:'Vivienda',food:'Comida',undated:'Otros gastos',extra:'Pago adicional',other:'Otra salida'}[type];}
+const eventIcon={income:'down',rent:'home',bill:'receipt',card:'card',food:'bag',undated:'wallet',extra:'send',other:'up'};
 function weekPage(){
   const weekDates=dates(week,addDays(week,6)),ds=weekDates.map(d=>model.byDate.get(d)).filter(Boolean),rec=ds.reduce((n,d)=>n+d.income,0),out=ds.reduce((n,d)=>n+d.out,0);
   const active=model.byDate.get(selected)??ds[0],first=monday(plan.start),final=monday(plan.end);
@@ -152,13 +152,15 @@ function otherPage(){
       return '<article class="panel bank"><div class="banktop"><span class="bankicon tone'+(i%4)+'">'+icon('card',23)+'</span>'+editBtn('card',c.id)+'</div><h2>'+esc(c.name)+'</h2><strong>'+usd(progress.remaining)+'</strong><p>Saldo restante estimado</p><dl><div><dt>Saldo de referencia</dt><dd>'+usd(c.balance)+'</dd></div><div><dt>Pagos acreditados</dt><dd>'+usd(progress.credited)+'</dd></div><div><dt>En tránsito</dt><dd>'+usd(progress.transit)+'</dd></div><div><dt>APR de compras</dt><dd>'+(c.apr==null?'Pendiente':(c.apr/100).toFixed(2)+' %')+'</dd></div><div><dt>Mínimo inicial</dt><dd>'+usd(c.minimum)+'</dd></div></dl></article>';
     }).join('')+'</div>';control='<button class="primary" data-action="newcard">'+icon('plus',16)+' Añadir tarjeta</button>';
   }else if(view==='debit'){
-    const accounts=plan.debitAccounts??[],deposits=plan.deposits??[];
+    const accounts=plan.debitAccounts??[],deposits=plan.deposits??[],outflows=plan.debitOutflows??[],transfers=plan.transfers??[];
     control='<button class="primary" data-action="newaccount">'+icon('plus',16)+' Añadir cuenta</button>';
     body='<p class="footnote">Actualiza el saldo de cada cuenta cuando lo consultes en el banco. Los depósitos y pagos registrados después de ese saldo modifican la estimación. Cada viernes muestra la cuenta del cobro previsto.</p>'+
-      '<div class="cardgrid">'+accounts.map(a=>{const v=debitProgress(plan,a.id);return '<article class="panel bank"><div class="banktop">'+icon('wallet',22)+'<button class="rowedit" data-edit-account="'+esc(a.id)+'">Editar saldo</button></div><h2>'+esc(a.name)+'</h2>'+(a.id===plan.incomeAccount?tag('Recibe nómina semanal'):'<button class="link" data-income-account="'+esc(a.id)+'">Usar para cobro semanal</button>')+'<strong>'+usd(v.balance)+'</strong><p>Disponible estimado</p><dl><div><dt>Último saldo observado</dt><dd>'+usd(a.balance)+'</dd></div><div><dt>Depósitos posteriores</dt><dd>'+usd(v.income)+'</dd></div><div><dt>Pagos posteriores</dt><dd>'+usd(v.out)+'</dd></div></dl><button class="smallbtn account-deposit" data-new-deposit="'+esc(a.id)+'">Registrar depósito</button></article>';}).join('')+'</div>'+
+      '<div class="cardgrid">'+accounts.map(a=>{const v=debitProgress(plan,a.id);return '<article class="panel bank"><div class="banktop">'+icon('wallet',22)+'<button class="rowedit" data-edit-account="'+esc(a.id)+'">Editar saldo</button></div><h2>'+esc(a.name)+'</h2>'+(a.id===plan.incomeAccount?tag('Recibe nómina semanal'):'<button class="link" data-income-account="'+esc(a.id)+'">Usar para cobro semanal</button>')+'<strong>'+usd(v.balance)+'</strong><p>Disponible estimado</p><dl><div><dt>Último saldo observado</dt><dd>'+usd(a.balance)+'</dd></div><div><dt>Depósitos posteriores</dt><dd>'+usd(v.income)+'</dd></div><div><dt>Salidas posteriores</dt><dd>'+usd(v.out)+'</dd></div><div><dt>Salidas previstas</dt><dd>'+usd(v.planned)+'</dd></div></dl><div class="payment-actions"><button class="smallbtn account-deposit" data-new-deposit="'+esc(a.id)+'">Registrar depósito</button><button class="rowedit" data-new-transfer="'+esc(a.id)+'">Transferir entre cuentas</button><button class="rowedit" data-new-outflow="'+esc(a.id)+'">Otra salida</button></div></article>';}).join('')+'</div>'+
       panel('Movimientos asociados',table(['Fecha','Cuenta','Concepto','Importe',''],[
         ...deposits.map(d=>[short(d.date),esc(accounts.find(a=>a.id===d.account)?.name),d.kind==='ach'?'Nómina ACH':'Abono variable','+'+usd(d.amount),'<button class="rowedit" data-edit-deposit="'+esc(d.id)+'">Editar</button>']),
-        ...(plan.payments??[]).filter(e=>e.account).map(e=>[short(e.date),esc(accounts.find(a=>a.id===e.account)?.name),'Pago a '+esc(plan.cards.find(c=>c.id===e.card)?.name),'-'+usd(e.amount),'<button class="rowedit" data-pay-id="'+esc(e.id)+'">Editar</button>'])
+        ...(plan.payments??[]).filter(e=>e.account).map(e=>[short(e.date),esc(accounts.find(a=>a.id===e.account)?.name),'Pago a '+esc(plan.cards.find(c=>c.id===e.card)?.name),'-'+usd(e.amount),'<button class="rowedit" data-pay-id="'+esc(e.id)+'">Editar</button>']),
+        ...outflows.map(e=>[short(e.date),esc(accounts.find(a=>a.id===e.account)?.name),esc(e.name)+' · '+(e.status==='posted'?'Realizado':'Previsto'),'-'+usd(e.amount),'<button class="rowedit" data-edit-outflow="'+esc(e.id)+'">Editar</button>']),
+        ...transfers.map(e=>[short(e.date),esc(accounts.find(a=>a.id===e.from)?.name)+' → '+esc(accounts.find(a=>a.id===e.to)?.name),'Transferencia interna · '+(e.status==='posted'?'Realizada':'Prevista'),usd(e.amount),'<button class="rowedit" data-edit-transfer="'+esc(e.id)+'">Editar</button>'])
       ].sort((a,b)=>b[0].localeCompare(a[0])),'Aún no hay depósitos ni pagos vinculados a una cuenta.'));
   }else{
     const sends=view==='sends';body=panel(sends?'Pagos por enviar':'Estados del mes',table(sends?['Tarjeta','Enviar el','Vence','Mínimo','Desde comida','Enviar desde deuda','Estado','']:['Tarjeta','Vence','Mínimo','Acreditado','Interés del estado','Saldo de cierre','Estado',''],m.statements.map(a=>sends?[esc(a.card.name),short(a.send),short(a.due),usd(a.minimum),usd(a.fromFood),a.minimum==null||a.pending==null?'Pendiente':usd(a.pending),tag(a.status,a.confirmed?'':'warn'),editBtn('statement',a.id)]:[esc(a.card.name),short(a.due),usd(a.minimum),usd(a.paid),usd(a.st.interest),usd(a.st.balance),tag(a.status,a.confirmed?'':'warn'),editBtn('statement',a.id)]),'Este mes inicial solo incluye apartados. Los estados comienzan el mes siguiente.'));
@@ -226,11 +228,52 @@ function debitEditor(kind,id=''){
       '<p class="footnote">El saldo observado incluye los depósitos y pagos que el banco ya refleja. Los movimientos anteriores quedan incorporados como referencia.</p>')+
     '<p class="formerror" id="debit-error" role="alert"></p></div><div class="dialogfoot"><button class="secondary" type="button" data-action="done">Cancelar</button><button class="primary" type="submit">Guardar</button></div></form>');
 }
+function outflowEditor(id='',accountId=''){
+  const entry=(plan.debitOutflows??[]).find(o=>o.id===id),accounts=plan.debitAccounts??[];
+  const now=new Date(),today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
+  activeEditor=null;bindings=[];
+  openDialog(dialogTitle(entry?'Editar salida':'Registrar salida',entry?.name??'')+'<form id="outflow-form" data-id="'+esc(id)+'"><div class="editform">'+
+    '<label class="formfield"><span>Concepto</span><input name="name" required maxlength="100" value="'+esc(entry?.name??'')+'" placeholder="Ej. Donación familiar"></label>'+
+    '<label class="formfield"><span>Cuenta de origen</span><select name="account">'+accounts.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===(entry?.account??accountId)?'selected':'')+'>'+esc(a.name)+'</option>').join('')+'</select></label>'+
+    '<label class="formfield"><span>Fecha</span><input name="date" required type="date" value="'+(entry?.date??today)+'"></label>'+
+    '<label class="formfield"><span>Importe · USD</span><input name="amount" required type="number" min="0.01" step="0.01" value="'+(entry?(entry.amount/100).toFixed(2):'')+'"></label>'+
+    '<label class="formfield"><span>Estado</span><select name="status"><option value="planned" '+(entry?.status!=='posted'?'selected':'')+'>Previsto</option><option value="posted" '+(entry?.status==='posted'?'selected':'')+'>Realizado</option></select></label>'+
+    '<p class="footnote">Una salida prevista reduce la caja proyectada. Cuando se realiza, reduce también el disponible estimado de la cuenta.</p><p class="formerror" id="outflow-error" role="alert"></p></div>'+
+    '<div class="dialogfoot"><button type="button" class="secondary" data-action="done">Cancelar</button><button class="primary" type="submit">Guardar salida</button></div></form>');
+}
+function transferEditor(id='',fromId=''){
+  const entry=(plan.transfers??[]).find(o=>o.id===id),accounts=plan.debitAccounts??[];
+  const now=new Date(),today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
+  const select=(name,value)=>'<select name="'+name+'">'+accounts.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===value?'selected':'')+'>'+esc(a.name)+'</option>').join('')+'</select>';
+  activeEditor=null;bindings=[];
+  openDialog(dialogTitle(entry?'Editar transferencia':'Transferir entre cuentas')+'<form id="transfer-form" data-id="'+esc(id)+'"><div class="editform">'+
+    '<label class="formfield"><span>Desde</span>'+select('from',entry?.from??fromId)+'</label>'+
+    '<label class="formfield"><span>Hacia</span>'+select('to',entry?.to??accounts.find(a=>a.id!==fromId)?.id)+'</label>'+
+    '<label class="formfield"><span>Fecha</span><input name="date" required type="date" value="'+(entry?.date??today)+'"></label>'+
+    '<label class="formfield"><span>Importe · USD</span><input name="amount" required type="number" min="0.01" step="0.01" value="'+(entry?(entry.amount/100).toFixed(2):'')+'"></label>'+
+    '<label class="formfield"><span>Estado</span><select name="status"><option value="planned" '+(entry?.status!=='posted'?'selected':'')+'>Prevista</option><option value="posted" '+(entry?.status==='posted'?'selected':'')+'>Realizada</option></select></label>'+
+    '<p class="footnote">La transferencia mueve dinero entre tus cuentas. Si los saldos observados ya la incluyen, actualiza ambos saldos para usar esos importes como referencia.</p><p class="formerror" id="transfer-error" role="alert"></p></div>'+
+    '<div class="dialogfoot"><button type="button" class="secondary" data-action="done">Cancelar</button><button class="primary" type="submit">Guardar transferencia</button></div></form>');
+}
+dialog.addEventListener('submit',event=>{
+  const form=event.target;if(form.id!=='transfer-form')return;
+  event.preventDefault();const values=new FormData(form),id=form.dataset.id;
+  const record={id:id||'t'+crypto.randomUUID(),from:values.get('from'),to:values.get('to'),date:values.get('date'),amount:Math.round(Number(values.get('amount'))*100),status:values.get('status')};
+  const next={...plan,transfers:id?(plan.transfers??[]).map(t=>t.id===id?record:t):[...(plan.transfers??[]),record]};
+  try{validate(next);plan=next;changed();void flush();finish();notice('Transferencia registrada.');}catch(error){$('transfer-error').textContent=error.message;}
+});
+dialog.addEventListener('submit',event=>{
+  const form=event.target;if(form.id!=='outflow-form')return;
+  event.preventDefault();const values=new FormData(form),id=form.dataset.id;
+  const record={id:id||'o'+crypto.randomUUID(),name:String(values.get('name')).trim(),account:values.get('account'),date:values.get('date'),amount:Math.round(Number(values.get('amount'))*100),status:values.get('status')};
+  const next={...plan,debitOutflows:id?(plan.debitOutflows??[]).map(o=>o.id===id?record:o):[...(plan.debitOutflows??[]),record]};
+  try{validate(next);plan=next;changed();void flush();finish();notice('Salida registrada.');}catch(error){$('outflow-error').textContent=error.message;}
+});
 dialog.addEventListener('submit',event=>{
   const form=event.target;if(form.id!=='debit-form')return;
   event.preventDefault();const values=new FormData(form),next=structuredClone(plan),id=form.dataset.id;
   if(form.dataset.kind==='account'){
-    const included=[...(next.payments??[]).filter(e=>e.account===id).map(e=>'p:'+e.id),...(next.deposits??[]).filter(d=>d.account===id).map(d=>'d:'+d.id)];
+    const included=[...(next.payments??[]).filter(e=>e.account===id).map(e=>'p:'+e.id),...(next.deposits??[]).filter(d=>d.account===id).map(d=>'d:'+d.id),...(next.debitOutflows??[]).filter(o=>o.account===id&&o.status==='posted').map(o=>'o:'+o.id),...(next.transfers??[]).filter(t=>t.status==='posted'&&(t.from===id||t.to===id)).map(t=>'t:'+t.id)];
     const balance=values.get('balance')===''?null:Math.round(Number(values.get('balance'))*100);
     const record={id:id||'a'+crypto.randomUUID(),name:String(values.get('name')).trim(),balance,included};
     next.debitAccounts=id?next.debitAccounts.map(a=>a.id===id?record:a):[...(next.debitAccounts??[]),record];
@@ -333,6 +376,10 @@ document.addEventListener('click',e=>{
   if(t.dataset.incomeAccount){const next={...plan,incomeAccount:t.dataset.incomeAccount};validate(next);plan=next;changed();void flush();return;}
   if(t.dataset.newDeposit){debitEditor('deposit',t.dataset.newDeposit);return;}
   if(t.dataset.editDeposit){debitEditor('deposit',t.dataset.editDeposit);return;}
+  if(t.dataset.newOutflow){outflowEditor('',t.dataset.newOutflow);return;}
+  if(t.dataset.editOutflow){outflowEditor(t.dataset.editOutflow);return;}
+  if(t.dataset.newTransfer){transferEditor('',t.dataset.newTransfer);return;}
+  if(t.dataset.editTransfer){transferEditor(t.dataset.editTransfer);return;}
   if(t.dataset.payId){paymentEditor(null,null,t.dataset.payId);return;}
   if(t.dataset.creditPayment){
     const records=plan.payments??[],id=t.dataset.creditPayment;
@@ -346,6 +393,7 @@ document.addEventListener('click',e=>{
   if(t.dataset.edit){editor(t.dataset.edit,t.dataset.id,t.dataset.month??month);return;}
   if(t.dataset.event!=null){const ev=model.byDate.get(selected).events[+t.dataset.event];
     if(ev.tab==='payment'){paymentEditor(null,null,ev.id);return;}
+    if(ev.tab==='outflow'){outflowEditor(ev.id);return;}
     if(ev.tab==='bills'&&!ev.id){month=ev.month;remember();go('bills');return;}
     editor(({fridays:'friday',budget:'budget',bills:'bill',dues:'statement',sends:'priority'})[ev.tab],ev.id??'',ev.month??month);return;}
   switch(t.dataset.action){

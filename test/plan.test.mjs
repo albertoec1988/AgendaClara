@@ -96,9 +96,22 @@ test('el saldo observado de débito incorpora movimientos posteriores una sola v
   p.debitAccounts=[{id:'a1',name:'PNC',balance:99100,included:['p:p1']}];
   p.payments=[payment({account:'a1',amount:84000,status:'credited'})];
   p.deposits=[{id:'d1',account:'a1',kind:'ach',date:'2028-02-09',amount:130000}];
-  assert.deepEqual(debitProgress(validate(p),'a1'),{income:130000,out:0,balance:229100});
+  assert.deepEqual(debitProgress(validate(p),'a1'),{income:130000,out:0,planned:0,balance:229100});
   p.payments.push(payment({id:'p2',account:'a1',amount:10000,date:'2028-02-10'}));
-  assert.deepEqual(debitProgress(validate(p),'a1'),{income:130000,out:10000,balance:219100});
+  assert.deepEqual(debitProgress(validate(p),'a1'),{income:130000,out:10000,planned:0,balance:219100});
   p.incomeAccount='a1';assert.equal(validate(p).incomeAccount,'a1');
   p.incomeAccount='ausente';assert.throws(()=>validate(p));
+});
+test('una transferencia interna cambia ambas cuentas sin crear gasto',()=>{
+  const p=sample();
+  p.debitAccounts=[{id:'a1',name:'PNC',balance:200000,included:[]},{id:'a2',name:'Chase',balance:50000,included:[]}];
+  p.transfers=[{id:'t1',from:'a1',to:'a2',date:'2028-02-09',amount:100000,status:'posted'}];
+  const from=debitProgress(validate(p),'a1'),to=debitProgress(p,'a2');
+  assert.equal(from.balance,100000);assert.equal(to.balance,150000);
+  assert.equal(from.balance+to.balance,250000);
+  p.debitAccounts[1].balance=150000;p.debitAccounts[1].included=['t:t1'];
+  assert.equal(debitProgress(p,'a2').balance,150000);
+  p.transfers[0].status='planned';p.debitAccounts[1].included=[];
+  assert.equal(debitProgress(p,'a1').balance,200000);
+  assert.equal(debitProgress(p,'a1').planned,100000);
 });
