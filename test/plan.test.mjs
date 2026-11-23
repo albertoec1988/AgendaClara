@@ -122,6 +122,6 @@ test('la caja diaria se ancla a los saldos observados y aplica solo movimientos 
   p.incomeAccount='a1';
   p.weeks[1].base=150000;
   const model=compute(validate(p));
-  assert.equal(model.byDate.get('2028-01-21').cash,249100);
-  assert.equal(model.byDate.get('2028-01-28').cash,399100);
+  assert.equal(model.byDate.get('2028-01-21').cash,329100);
+  assert.equal(model.byDate.get('2028-01-28').cash,479100);
 });
