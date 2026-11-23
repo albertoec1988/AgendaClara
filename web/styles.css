@@ -11,6 +11,13 @@ dialog{border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 70px #0
 @media(max-width:850px){#layout{grid-template-columns:minmax(0,1fr)}#rail{display:none;position:fixed;width:225px;left:0;top:56px;height:calc(100dvh - 56px);box-shadow:15px 5px 50px #0c291f30}#rail.open{display:flex}.mobile{display:grid}.top{height:56px;justify-content:flex-start}.top .save-status{margin-left:auto}.split{grid-template-columns:1fr 1fr}main{padding-top:24px}.brand{padding-bottom:12px}}
 @media(max-width:650px){.split{grid-template-columns:1fr}.pagehead{align-items:flex-start;flex-wrap:wrap;margin-bottom:17px}.weeknav{margin-top:1px}.kpis{grid-template-columns:1fr 1fr}.feature{grid-column:1/-1}.kpi{min-height:108px;padding:14px 16px}.kpi.feature{min-height:112px}.kpi strong{margin-top:7px}.kpi small{font-size:.76rem}.panel{border-radius:12px;padding:15px 13px}.calendar .panelhead{align-items:start;flex-wrap:wrap;gap:7px}.calendar h2{font-size:1.05rem}.legend{gap:7px;font-size:.74rem}.days{gap:3px}.day{border-radius:7px;padding:6px 0}.day span{font-size:.74rem}.day b{font-size:1.16rem}.fieldlist{grid-template-columns:1fr}.crumb{font-size:.79rem;gap:7px}.top{padding-inline:12px}.save-status{font-size:.7rem;padding:5px 8px}.klabel{font-size:.82rem}.klabel svg{width:17px;height:17px}.chartkey{margin-bottom:12px}.cardgrid{grid-template-columns:1fr 1fr;gap:8px}.bank .rowedit{font-size:0;gap:0}.bank>strong{font-size:1.35rem}.bank dl div{align-items:start;flex-direction:column;gap:3px}.pagehead h1{font-size:2.1rem}}
 :root #rail{scrollbar-width:thin;scrollbar-color:#446154 #122e29}
+.subcell{display:block;margin-top:4px;font-weight:450;color:var(--muted);font-size:.78rem}
+.payment-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.remove-payment{margin-top:16px;font-size:.86rem;color:var(--muted)}
+.remove-payment summary{cursor:pointer}
+.remove-payment button{margin-top:8px;color:#873e28}
+.use-minimum{margin:-4px 0 12px;padding:0}
+.use-minimum[hidden]{display:none}
 @media(max-width:650px){
   .tablewrap{overflow:visible}.tablewrap table,.tablewrap tbody{display:block;white-space:normal}
   .tablewrap thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}

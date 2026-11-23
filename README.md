@@ -17,6 +17,7 @@ Abre **http://127.0.0.1:4178/**. La aplicación conserva los cambios automática
 - En **Mi semana**, elige la semana, pulsa un día y abre cualquier cobro, pago o factura para editar sus datos.
 - **Envíos por tarjeta** reúne mínimos y abonos adicionales. **Vencimientos** permite confirmar el estado y registrar pagos acreditados. El plan utiliza el viernes anterior al vencimiento.
 - **Plan mensual** y **Cada viernes** muestran apartados. **Caja diaria** calcula el efectivo tomando en cuenta el día del pago. El mínimo ya acreditado se descuenta del pendiente por enviar y se conserva como salida en la proyección.
+- En **Plan mensual**, elige el mes del estado y pulsa **Registrar envío** junto a la tarjeta. Introduce la fecha real, el importe y el origen. Un pago parcial reduce el mínimo por enviar. Cuando el emisor lo confirme, pulsa **Marcar acreditado** en el historial. La salida de caja se registra una sola vez en la fecha del envío. El origen **Presupuesto de comida** utiliza el apartado de comestibles. Los pagos anteriores importados del libro aparecen como **Acreditado** y **Sin fecha**.
 - **Presupuesto**, **Gastos fijos** y **Tarjetas** contienen los datos de origen. Los cambios actualizan todas las vistas. Las casillas opcionales vacías representan información pendiente.
 - En **Datos y respaldo** puedes descargar y restaurar un JSON. El archivo contiene tu información financiera.
 

@@ -101,16 +101,46 @@ function table(head,rows,empty='Sin registros para este período.'){return '<div
 const editBtn=(kind,id='',m=month)=>'<button class="rowedit" aria-label="Editar registro" data-edit="'+kind+'" data-id="'+esc(id)+'" data-month="'+esc(m)+'">'+icon('edit',15)+' Editar</button>';
 const panel=(heading,content,action='')=>'<section class="panel"><div class="panelhead"><h2>'+esc(heading)+'</h2>'+action+'</div>'+content+'</section>';
 const tag=(s,style='')=>'<span class="tag '+style+'">'+esc(s)+'</span>';
+function monthlyPayments(m){
+  const byCard=new Map(m.statements.map(s=>[s.id,s]));
+  const summary='<div class="kpis">'+
+    kpi('Apartado para deuda',usd(m.debt),'Distribución de los cobros del mes','wallet','feature')+
+    kpi('En tránsito',usd(m.statements.reduce((n,s)=>n+s.transit,0)),'Envíos pendientes de acreditar','send')+
+    kpi('Acreditado',usd(m.statements.reduce((n,s)=>n+s.paid,0)),'Pagos confirmados para los estados del mes','check')+'</div>';
+  const cards=plan.cards.map(c=>{
+    const s=byCard.get(c.id);
+    const state=s?.status??'Sin estado inicial';
+    const date=s?.send?'Enviar el '+short(s.send)+' · vence el '+short(s.due):state;
+    return ['<strong>'+esc(c.name)+'</strong><small class="subcell">'+esc(date)+'</small>',
+      usd(s?.minimum),usd(s?.transit??0),usd(s?.paid??0),
+      '<strong>'+usd(s?.remaining)+'</strong>'+(s&&!s.confirmed&&s.minimum!=null?'<small class="subcell">Estimado</small>':''),
+      '<button class="rowedit" data-pay-card="'+esc(c.id)+'" aria-label="Registrar envío a '+esc(c.name)+'">'+icon('plus',14)+' Registrar envío</button>'];
+  });
+  const guidance=m.extra>0?'<div class="summaryline"><span>Adicional previsto para '+esc(m.card.name)+' el '+short(m.weeks.at(-1).date)+'</span><b>'+usd(m.extra)+'</b></div>':'';
+  const paymentsPanel=panel('Pagos de tarjetas · '+monthText(m.key),
+    table(['Tarjeta','Mínimo','En tránsito','Acreditado','Mínimo por enviar',''],cards,'Añade una tarjeta en la pestaña Tarjetas para registrar un envío.')+guidance);
+  const records=(plan.payments??[]).filter(e=>e.period===m.key).slice().reverse().sort((a,b)=>b.date.localeCompare(a.date));
+  const rows=records.map(e=>{
+    const card=plan.cards.find(c=>c.id===e.card),credited=e.status==='credited';
+    const confirm=credited?'':'<button class="smallbtn" data-credit-payment="'+esc(e.id)+'">Marcar acreditado</button>';
+    return [short(e.date),esc(card.name),e.source==='food'?'Comida':'Deuda',usd(e.amount),tag(credited?'Acreditado':'En tránsito',credited?'':'warn'),
+      '<div class="payment-actions">'+confirm+'<button class="rowedit" data-pay-id="'+esc(e.id)+'">Editar</button></div>'];
+  });
+  for(const s of m.statements.filter(a=>a.st.paid>0)){
+    rows.push(['Sin fecha',esc(s.card.name),'Estado previo',usd(s.st.paid),tag('Acreditado'),editBtn('statement',s.id,m.key)]);
+  }
+  return summary+paymentsPanel+panel('Historial de envíos del estado',table(['Fecha de envío','Tarjeta','Origen','Importe','Estado',''],rows,'Todavía no hay pagos registrados para este mes.'));
+}
 function otherPage(){
   const n=nav.find(v=>v[0]===view),m=model.months.find(x=>x.key===month);
-  let body='',control=['sends','fridays','dues','bills','cash'].includes(view)?monthSelect():'';
+  let body='',control=['monthly','sends','fridays','dues','bills','cash'].includes(view)?monthSelect():'';
   if(view==='monthly'){
-    body=panel('Distribución mensual',table(['Mes','Cobros','Renta siguiente','Servicios','Comida','Para deuda','Fondo al cierre'],model.months.map(m=>['<button class="link" data-gocash="'+m.key+'">'+monthText(m.key)+'</button>',usd(m.income),usd(m.rent),usd(m.bills),usd(m.food),usd(m.debt),usd(m.close)])))+'<p class="footnote">El fondo al cierre de esta vista excluye los sobres apartados. Caja diaria muestra el efectivo según las fechas de cobro y pago.</p>';
+    body=monthlyPayments(m)+panel('Distribución mensual',table(['Mes','Cobros','Renta siguiente','Servicios','Comida','Para deuda','Fondo al cierre'],model.months.map(m=>['<button class="link" data-gocash="'+m.key+'">'+monthText(m.key)+'</button>',usd(m.income),usd(m.rent),usd(m.bills),usd(m.food),usd(m.debt),usd(m.close)])))+'<p class="footnote">El fondo al cierre excluye los sobres apartados. Caja diaria muestra las salidas en la fecha del envío.</p>';
   }else if(view==='fridays'){
     body=panel('Sobres de cada cobro',table(['Viernes','Cobro','Renta','Servicios','Comida','Para deuda','Fondo al cierre',''],m.weeks.map(w=>[short(w.date),usd(w.income),usd(w.rent),usd(w.bills),usd(w.food),usd(w.debt),usd(w.close),editBtn('friday',w.date)])));
   }else if(view==='cash'){
     const ds=model.days.filter(d=>monthOf(d.date)===month||(m===model.months.at(-1)&&d.date===plan.end));
-    body=panel('Saldo por día',table(['Día','Ingresos','Salidas','Mínimos desde deuda','Caja al cierre','Falta para el fondo','Con ahorro semanal'],ds.map(d=>['<button class="link" data-jump="'+d.date+'">'+short(d.date)+'</button>',usd(d.income),usd(d.out),usd(d.minimum),usd(d.cash),d.gap?tag(usd(d.gap),'warn'):'—',usd(d.scenario)])))+'<p class="footnote">Caja reserva los mínimos completos. Los pagos ya acreditados reducen el pendiente que ves en Mi semana.</p>';
+    body=panel('Saldo por día',table(['Día','Ingresos','Salidas','Mínimos aún reservados','Caja al cierre','Falta para el fondo','Con ahorro semanal'],ds.map(d=>['<button class="link" data-jump="'+d.date+'">'+short(d.date)+'</button>',usd(d.income),usd(d.out),usd(d.minimum),usd(d.cash),d.gap?tag(usd(d.gap),'warn'):'—',usd(d.scenario)])))+'<p class="footnote">Cada envío registrado figura en su fecha de salida. Los mínimos pendientes mantienen su reserva en la fecha prevista.</p>';
   }else if(view==='budget'){
     body=panel('Importes del plan','<div class="fieldlist">'+Object.entries(fields).map(([k,n])=>'<button data-edit="budget" data-id="'+k+'"><span>'+esc(n)+'</span><b>'+usd(plan.settings[k])+'</b>'+icon('edit',15)+'</button>').join('')+'</div>');
   }else if(view==='bills'){
@@ -128,6 +158,55 @@ function draw(){sidebar();const n=nav.find(x=>x[0]===view);document.title=n[1]+'
 let bindings=[],activeEditor=null,imported=null;
 function openDialog(html){$('dialog-content').innerHTML=html;if(!dialog.open)dialog.showModal();}
 function dialogTitle(t,sub=''){return '<div class="dialoghead"><div><h2>'+esc(t)+'</h2>'+(sub?'<p>'+esc(sub)+'</p>':'')+'</div><button class="iconbtn" aria-label="Cerrar" data-action="done">×</button></div>';}
+function paymentEditor(cardId,period,id){
+  const existing=id?(plan.payments??[]).find(e=>e.id===id):null;
+  const card=plan.cards.find(c=>c.id===(existing?.card??cardId));
+  if(!card||(id&&!existing))return;
+  period=existing?.period??period;
+  const statement=model.statements.find(s=>s.id===card.id&&s.key===period);
+  const now=new Date(),today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
+  const last=addDays(plan.end,-1),latest=today<last?today:last;
+  if(latest<plan.start){notice('Puedes registrar un envío a partir del '+short(plan.start)+'.');return;}
+  const select=(name,options,value)=>'<select name="'+name+'">'+options.map(([k,v])=>'<option value="'+esc(k)+'" '+(value===k?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select>';
+  const field=(label,input)=>'<label class="formfield"><span>'+label+'</span>'+input+'</label>';
+  const sources=[['debt','Apartado para deuda']];
+  if(card.id===plan.foodCard||existing?.source==='food')sources.push(['food','Presupuesto de comida']);
+  const source=existing?.source??(card.id===plan.foodCard?'food':'debt');
+  activeEditor=null;bindings=[];
+  openDialog(dialogTitle(existing?'Editar envío':'Registrar envío',card.name+' · '+monthText(period))+
+    '<form id="payment-form" data-card="'+esc(card.id)+'" data-id="'+esc(existing?.id??'')+'"><div class="editform">'+
+    field('Mes del estado',select('period',model.months.map(m=>[m.key,monthText(m.key)]),period))+
+    field('Fecha en que enviaste el dinero','<input required type="date" name="date" min="'+plan.start+'" max="'+latest+'" value="'+(existing?.date??latest)+'">')+
+    field('Importe enviado · USD','<input required name="amount" type="number" min="0.01" max="999999999.99" step="0.01" inputmode="decimal" placeholder="0.00" value="'+(existing?(existing.amount/100).toFixed(2):'')+'">')+
+    (!existing?'<button type="button" class="link use-minimum" data-action="useminimum" '+(statement?.remaining>0?'':'hidden')+'>Usar mínimo por enviar · '+usd(statement?.remaining)+'</button>':'')+
+    field('Origen del dinero',select('source',sources,source))+
+    field('Estado del pago',select('status',[['sent','Enviado · pendiente de acreditar'],['credited','Acreditado por la tarjeta']],existing?.status??'sent'))+
+    '<p class="footnote">Registra el importe que ya enviaste desde tu banco. También puedes registrar un abono adicional al mínimo.</p><p class="formerror" role="alert" id="payment-error"></p>'+
+    (existing?'<details class="remove-payment"><summary>Corregir un registro duplicado</summary><button type="button" class="rowedit" data-remove-payment="'+esc(id)+'">Eliminar este registro del plan</button></details>':'')+
+    '</div><div class="dialogfoot"><button class="secondary" type="button" data-action="done">Cancelar</button><button type="submit" class="primary">'+(existing?'Guardar cambios':'Guardar envío')+'</button></div></form>');
+}
+function savePayments(payments,message){
+  if(conflict){notice('Recarga o respalda tus cambios antes de registrar otro pago.');return false;}
+  const next={...plan,payments};
+  try{validate(next);}catch(error){
+    if($('payment-error'))$('payment-error').textContent=error.message;
+    else notice(error.message);
+    return false;
+  }
+  plan=next;changed();void flush();notice(message);return true;
+}
+dialog.addEventListener('submit',event=>{
+  const form=event.target;
+  if(form.id!=='payment-form')return;
+  event.preventDefault();
+  const values=new FormData(form),id=form.dataset.id,records=plan.payments??[];
+  const entry={id:id||'p'+crypto.randomUUID(),card:form.dataset.card,period:values.get('period'),date:values.get('date'),
+    amount:Math.round(Number(values.get('amount'))*100),source:values.get('source'),status:values.get('status')};
+  const updated=id?records.map(e=>e.id===id?entry:e):[...records,entry];
+  if(savePayments(updated,'Envío registrado en el plan.')){
+    month=entry.period;remember();finish();draw();
+  }
+});
 function editor(kind,id='',m=month){
   const defs=[];let heading='',hint='';
   const field=(label,type,loc,options={})=>defs.push({label,type,loc,...options});
@@ -144,9 +223,9 @@ function editor(kind,id='',m=month){
     field('Cobro corregido · USD','money',['weeks',i,'override'],{optional:true,help:'Escribe 0 si ese depósito no llega.'});field('Apartado de servicios esta semana · USD','money',['weeks',i,'billsOverride'],{optional:true});}
   if(kind==='statement'&&card){const key=m+'/'+id,first=m===model.months[1]?.key;
     const a=model.statements.find(s=>s.key===m&&s.id===id);heading='Revisar estado';hint=card.name+' · '+monthText(m)+(a?' · Mínimo '+usd(a.minimum)+' · Vence '+short(a.due):'');const f=(n,t,k,o={})=>field(n,t,['statements',key,k],{optional:true,...o});
-    f('Mínimo confirmado · USD','money','minimum',{help:first?'Si lo dejas vacío, se usa el mínimo inicial de Tarjetas.':'Escribe 0 únicamente si el emisor indica que no hay mínimo.'});f('Fecha de vencimiento','date','dueDate',{month:m});f('Total ya acreditado · USD','money','paid');
+    f('Mínimo confirmado · USD','money','minimum',{help:first?'Si lo dejas vacío, se usa el mínimo inicial de Tarjetas.':'Escribe 0 únicamente si el emisor indica que no hay mínimo.'});f('Fecha de vencimiento','date','dueDate',{month:m});f('Acreditado previo sin fecha · USD','money','paid',{help:'Solo pagos anteriores al historial. Los envíos que registras en Plan mensual se suman automáticamente.'});
     f('Interés del estado · USD','money','interest');f('Saldo de cierre · USD','money','balance');
-    if(plan.foodCard===id){f('Comida aplicable al mínimo · USD','money','foodCredit');f('De lo acreditado, cuánto fue comida · USD','money','foodPaid');}
+    if(plan.foodCard===id){f('Comida aplicable al mínimo · USD','money','foodCredit');f('Del acreditado previo, cuánto fue comida · USD','money','foodPaid');}
   }
   if(kind==='priority'){heading='Prioridad de pago';hint=monthText(m);field('Tarjeta para el extra','choice',['priorities',m,'card'],{optional:true,options:cardOptions});field('Saldo máximo para este extra · USD','money',['priorities',m,'cap'],{optional:true,help:'Vacío para utilizar el saldo de referencia disponible.'});}
   if(!defs.length)return;activeEditor={kind,id,m};bindings=defs;
@@ -186,6 +265,13 @@ window.addEventListener('hashchange',()=>{if(!plan)return;view=nav.some(x=>x[0]=
 function setWeek(d){if(d<monday(plan.start)||d>monday(plan.end))return;const offset=(weekday(selected)+6)%7;week=d;selected=addDays(d,offset);if(!model.byDate.has(selected))selected=model.days.find(v=>v.date>=d)?.date??plan.end;remember();draw();}
 document.addEventListener('change',async e=>{
   const t=e.target;if(t.dataset.action==='month'){month=t.value;remember();draw();}if(t.dataset.action==='week')setWeek(t.value);
+  if(t.name==='period'&&t.form?.id==='payment-form'){
+    const shortcut=t.form.querySelector('[data-action="useminimum"]');
+    if(shortcut){
+      const s=model.statements.find(s=>s.id===t.form.dataset.card&&s.key===t.value);
+      shortcut.hidden=!(s?.remaining>0);shortcut.textContent='Usar mínimo por enviar · '+usd(s?.remaining);
+    }
+  }
   if(t.id==='upload'&&t.files[0]){try{if(t.files[0].size>2_000_000)throw Error('El archivo supera el tamaño admitido.');imported=validate(JSON.parse(await t.files[0].text()));$('import-message').innerHTML='El respaldo contiene '+imported.cards.length+' tarjetas. <button data-action="restore" class="primary">Reemplazar el plan actual</button>';}catch(err){imported=null;$('import-message').textContent=err.message;}}
 });
 document.addEventListener('click',e=>{
@@ -197,11 +283,28 @@ document.addEventListener('click',e=>{
   if(t.dataset.day){selected=t.dataset.day;remember();draw();return;}
   if(t.dataset.gocash){month=t.dataset.gocash;remember();go('cash');return;}
   if(t.dataset.jump){selected=t.dataset.jump;week=monday(selected);remember();go('week');return;}
+  if(t.dataset.payCard){paymentEditor(t.dataset.payCard,month);return;}
+  if(t.dataset.payId){paymentEditor(null,null,t.dataset.payId);return;}
+  if(t.dataset.creditPayment){
+    const records=plan.payments??[],id=t.dataset.creditPayment;
+    if(records.some(e=>e.id===id&&e.status==='sent'))savePayments(records.map(e=>e.id===id?{...e,status:'credited'}:e),'Pago marcado como acreditado.');
+    return;
+  }
+  if(t.dataset.removePayment){
+    if(savePayments((plan.payments??[]).filter(e=>e.id!==t.dataset.removePayment),'Registro eliminado del plan.'))finish();
+    return;
+  }
   if(t.dataset.edit){editor(t.dataset.edit,t.dataset.id,t.dataset.month??month);return;}
   if(t.dataset.event!=null){const ev=model.byDate.get(selected).events[+t.dataset.event];
+    if(ev.tab==='payment'){paymentEditor(null,null,ev.id);return;}
     if(ev.tab==='bills'&&!ev.id){month=ev.month;remember();go('bills');return;}
     editor(({fridays:'friday',budget:'budget',bills:'bill',dues:'statement',sends:'priority'})[ev.tab],ev.id??'',ev.month??month);return;}
   switch(t.dataset.action){
+    case 'useminimum':{
+      const form=t.form,s=model.statements.find(a=>a.key===form.elements.period.value&&a.id===form.dataset.card);
+      if(s?.remaining>0)form.elements.amount.value=(s.remaining/100).toFixed(2);
+      break;
+    }
     case 'prev':setWeek(addDays(week,-7));break;
     case 'next':setWeek(addDays(week,7));break;
     case 'savings':editor('budget','saving');break;

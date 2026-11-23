@@ -47,7 +47,30 @@ export function validate(p) {
     check((s.foodPaid??0)<=(s.paid??0),'La parte acreditada desde comida supera el pago total.');
   }
   for(const [m,t] of Object.entries(p.priorities))check(ms.has(m)&&object(t)&&maybe(t.card,id=>ids.has(id))&&maybe(t.cap),'Prioridad mensual inválida.');
+  const payments=p.payments===undefined?[]:p.payments;
+  check(Array.isArray(payments),'Registro de pagos inválido.');
+  const paymentIds=new Set();
+  for(const entry of payments){
+    check(object(entry)&&ident(entry.id)&&!paymentIds.has(entry.id)&&ids.has(entry.card)&&ms.has(entry.period)
+      &&isDate(entry.date)&&entry.date>=p.start&&entry.date<p.end&&amount(entry.amount)&&entry.amount>0
+      &&['debt','food'].includes(entry.source)&&['sent','credited'].includes(entry.status),'Revisa la tarjeta, la fecha, el importe y el estado del envío.');
+    paymentIds.add(entry.id);
+  }
   return p;
+}
+function paymentIndex(payments){
+  const byStatement=new Map(),byDate=new Map(),foodByMonth=new Map();
+  function append(map,key,entry){
+    if(!map.has(key))map.set(key,[]);
+    map.get(key).push(entry);
+  }
+  for(const entry of payments){
+    append(byStatement,entry.period+'/'+entry.card,entry);
+    append(byDate,entry.date,entry);
+    const month=monthOf(entry.date);
+    if(entry.source==='food')foodByMonth.set(month,(foodByMonth.get(month)??0)+entry.amount);
+  }
+  return {byStatement,byDate,foodByMonth};
 }
 export function blankPlan() {
   const now=new Date(),today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
@@ -59,6 +82,7 @@ export function compute(p) {
   const s=p.settings, weeks=[], statements=[], months=[], days=[], byDate=new Map(), byWeek=new Map();
   const period=dates(p.start,addDays(p.end,-1)), keys=[...new Set(period.map(monthOf))];
   const schedule=new Map(), previous=new Map();
+  const ledger=paymentIndex(p.payments??[]);
   let free=s.opening;
   for(const [mi,key] of keys.entries()){
     const list=p.weeks.filter(w=>monthOf(w.date)===key), count=list.length;
@@ -74,7 +98,7 @@ export function compute(p) {
       const w={...base,month:key,income:base.override??base.base??s.income,food:foodThisFriday,undated:slice(billBudget-dated)};
       month.weeks.push(w);weeks.push(w);byWeek.set(w.date,w);
     }
-    if(mi>0) for(const c of p.cards){
+    for(const c of p.cards){
       const st=p.statements[key+'/'+c.id]??{}, prev=previous.get(c.id);
       const min=st.minimum??(mi===1?c.minimum:null);
       const fixedDate=st.dueDate??(mi===1&&c.dueDay?inMonth(key,c.dueDay):null);
@@ -84,13 +108,27 @@ export function compute(p) {
       const isFood=c.id===p.foodCard;
       const foodAvailable=total(month.weeks.filter(w=>send&&w.date<=send),'food');
       const fromFood=isFood?Math.min(minimum??0,s.food,st.foodCredit??foodAvailable):0;
-      const fromDebt=positive((minimum??0)-fromFood),paid=st.paid??0;
-      const unresolved=isFood&&fromDebt>0&&paid>0&&st.foodPaid==null;
-      const pending=unresolved?null:positive(fromDebt-positive(paid-(isFood?st.foodPaid??0:0)));
+      const fromDebt=positive((minimum??0)-fromFood),legacyPaid=st.paid??0;
+      const records=ledger.byStatement.get(key+'/'+c.id)??[];
+      const transit=total(records.filter(e=>e.status==='sent'),'amount');
+      const paid=legacyPaid+total(records.filter(e=>e.status==='credited'),'amount');
+      const sentFromDebt=total(records.filter(e=>e.source==='debt'),'amount');
+      const remaining=minimum==null?null:positive(minimum-paid-transit);
+      const legacyDebt=positive(legacyPaid-(isFood?st.foodPaid??0:0));
+      const unresolved=isFood&&fromDebt>0&&legacyPaid>0&&st.foodPaid==null&&remaining>0;
+      const legacyDue=positive(fromDebt-legacyDebt);
+      const beforeSends=Math.min(legacyDue,positive((minimum??0)-legacyPaid));
+      const afterSends=Math.min(remaining??0,positive(legacyDue-sentFromDebt));
+      const pending=unresolved?null:afterSends;
+      // Keep undated legacy credits in the original cash forecast. Dated sends replace the reservation.
+      const cashMinimum=fromDebt-(beforeSends-afterSends);
+      const extraDebtSent=positive(sentFromDebt-beforeSends);
       const confirmed=min!=null&&(min===0||!!fixedDate);
-      const status=minimum==null?'Confirmar mínimo':minimum===0?'Sin mínimo':!due?'Confirmar fecha':unresolved?'Desglosar comida':!confirmed?'Estimado':paid>=minimum?'Cubierto':pending===0?'Desde comida':'Por pagar';
-      const a={key,card:c,id:c.id,minimum,due,send,fromFood,fromDebt,paid,pending,status,confirmed,st};
-      month.missing+=Number(!confirmed||unresolved);previous.set(c.id,a);statements.push(a);month.statements.push(a);
+      const status=minimum==null?(mi===0?'Sin estado inicial':'Confirmar mínimo'):minimum===0?'Sin mínimo':!due?'Confirmar fecha':unresolved?'Desglosar comida':!confirmed?'Estimado':paid>=minimum?'Cubierto':remaining===0?'Enviado':pending===0?'Desde comida':'Por pagar';
+      const a={key,card:c,id:c.id,minimum,due,send,fromFood,fromDebt,paid,pending,remaining,transit,records,cashMinimum,extraDebtSent,status,confirmed,st};
+      if(mi>0||Object.keys(st).length||records.length){
+        month.missing+=Number(!confirmed||unresolved);previous.set(c.id,a);statements.push(a);month.statements.push(a);
+      }
       if(send){if(!schedule.has(send))schedule.set(send,[]);schedule.get(send).push(a);}
     }
     months.push(month);
@@ -121,14 +159,23 @@ export function compute(p) {
     if(dayOf(date)===1)ev('rent','Renta',s.rent,{tab:'budget',id:'rent'},'Vivienda');
     if(m) for(const b of p.bills)if(b.day&&inMonth(m.key,b.day)===date)ev('bill',b.name,b.amounts[m.key],{tab:'bills',id:b.id,month:m.key},'Factura del mes');
     if(w){ev('undated','Gastos sin fecha',w.undated,{tab:'bills',month:m.key},'Apartado semanal');
-      ev('food',p.cards.find(c=>c.id===p.foodCard)?.name??'Comestibles',w.food,{tab:'budget',id:'food'},'Tope de comestibles');}
+      const replaced=Math.min(w.food,ledger.foodByMonth.get(m.key)??0);
+      ledger.foodByMonth.set(m.key,(ledger.foodByMonth.get(m.key)??0)-replaced);
+      ev('food',p.cards.find(c=>c.id===p.foodCard)?.name??'Comestibles',w.food-replaced,{tab:'budget',id:'food'},'Tope de comestibles');}
+    const actual=ledger.byDate.get(date)??[];
+    for(const entry of actual){
+      const card=p.cards.find(c=>c.id===entry.card);
+      ev('card',card.name,entry.amount,{tab:'payment',id:entry.id,month:entry.period},entry.status==='credited'?'Pago acreditado':'Enviado · en tránsito');
+    }
     const sends=schedule.get(date)??[];
     for(const a of sends)ev('card',a.card.name,a.pending,{tab:'dues',id:a.id,month:a.key},a.confirmed?'Mínimo pendiente':'Mínimo estimado');
-    const required=total(sends,'fromDebt'),spending=total(events.filter(e=>!['income','card'].includes(e.type)),'value');
-    cash+=(w?.income??0)-spending-required;
+    const required=total(sends,'cashMinimum'),spending=total(events.filter(e=>!['income','card'].includes(e.type)),'value');
+    const out=spending+required+total(actual,'amount');
+    cash+=(w?.income??0)-out;
     const priority=['card','extra','food','rent','bill','undated','income'];
     events.sort((a,b)=>priority.indexOf(a.type)-priority.indexOf(b.type));
-    const d={date,events,income:w?.income??0,out:spending+required,minimum:required,base:cash,extra:0,cash};
+    const d={date,events,income:w?.income??0,out,minimum:required,base:cash,extra:0,cash};
+    if(m)m.debtCommitted=(m.debtCommitted??0)+required+total(actual.filter(e=>e.source==='debt'),'amount');
     days.push(d);byDate.set(date,d);
   }
   let low=Infinity;
@@ -143,7 +190,7 @@ export function compute(p) {
       m.min=total(statements.filter(x=>x.send&&monthOf(x.send)===m.key),'fromDebt');
       const cap=pref.cap??(i<=1&&c?positive(c.balance-(a?.minimum??0)):(a?.st.balance!=null?positive(a.st.balance-(a.minimum??0)):null));
       m.margin=d.futureLow-s.floor-extras;m.card=c;m.cap=cap;
-      m.extra=i>0&&!m.missing&&c&&cap!=null?positive(Math.min(m.debt-m.min,cap,m.margin)):0;
+      m.extra=i>0&&!m.missing&&c&&cap!=null?positive(Math.min(m.debt-m.debtCommitted,cap-(a?.extraDebtSent??0),m.margin)):0;
       if(m.extra){d.events.push({type:'extra',label:c.name,value:m.extra,tab:'sends',month:m.key,note:'Abono adicional'});d.extra=m.extra;d.out+=m.extra;extras+=m.extra;}
     }
     d.cash=d.base-extras;d.scenario=d.cash+paydayCount*s.saving;d.gap=positive(s.floor-d.cash);
