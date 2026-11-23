@@ -197,7 +197,13 @@ export function compute(p) {
     Object.assign(m,{income:total(m.weeks,'income'),rent,bills,debt,close:free});
   }
   let cash=s.opening;
+  const observedAccounts=(p.debitAccounts??[]).filter(a=>a.balance!=null);
+  const observedCash=observedAccounts.length?observedAccounts.reduce((sum,a)=>sum+a.balance,0):null;
+  const observedIds=new Set(observedAccounts.flatMap(a=>a.included??[]));
+  const today=new Date().toISOString().slice(0,10);
+  let anchored=false;
   for(const date of [...period,p.end]){
+    if(!anchored&&observedCash!=null&&date>=today){cash=observedCash;anchored=true;}
     const m=months.find(x=>x.key===monthOf(date)), w=byWeek.get(date), events=[];
     const ev=(type,label,value,reference={},note='')=>{if(value>0)events.push({type,label,value,...reference,note});};
     if(w)ev('income','Cobro semanal',w.income,{tab:'fridays',id:date},'Ingreso previsto');
@@ -207,12 +213,12 @@ export function compute(p) {
       const replaced=Math.min(w.food,ledger.foodByMonth.get(m.key)??0);
       ledger.foodByMonth.set(m.key,(ledger.foodByMonth.get(m.key)??0)-replaced);
       ev('food',p.cards.find(c=>c.id===p.foodCard)?.name??'Comestibles',w.food-replaced,{tab:'budget',id:'food'},'Tope de comestibles');}
-    const actual=ledger.byDate.get(date)??[];
+    const actual=(ledger.byDate.get(date)??[]).filter(entry=>!observedIds.has('p:'+entry.id));
     for(const entry of actual){
       const card=p.cards.find(c=>c.id===entry.card);
       ev('card',card.name,entry.amount,{tab:'payment',id:entry.id,month:entry.period},entry.status==='credited'?'Pago acreditado':'Enviado · en tránsito');
     }
-    const otherOutflows=outflowsByDate.get(date)??[];
+    const otherOutflows=(outflowsByDate.get(date)??[]).filter(entry=>!observedIds.has('o:'+entry.id));
     for(const entry of otherOutflows)ev('other',entry.name,entry.amount,{tab:'outflow',id:entry.id},entry.status==='posted'?'Salida realizada':'Salida prevista');
     const sends=schedule.get(date)??[];
     for(const a of sends)ev('card',a.card.name,a.pending,{tab:'dues',id:a.id,month:a.key},a.confirmed?'Mínimo pendiente':'Mínimo estimado');

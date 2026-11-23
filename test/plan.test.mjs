@@ -115,3 +115,13 @@ test('una transferencia interna cambia ambas cuentas sin crear gasto',()=>{
   assert.equal(debitProgress(p,'a1').balance,200000);
   assert.equal(debitProgress(p,'a1').planned,100000);
 });
+test('la caja diaria se ancla a los saldos observados y aplica solo movimientos posteriores',()=>{
+  const p=sample();
+  p.start='2028-01-21';p.end='2028-04-01';
+  p.debitAccounts=[{id:'a1',name:'PNC',balance:249100,included:[]}];
+  p.incomeAccount='a1';
+  p.weeks[1].base=150000;
+  const model=compute(validate(p));
+  assert.equal(model.byDate.get('2028-01-21').cash,249100);
+  assert.equal(model.byDate.get('2028-01-28').cash,399100);
+});
