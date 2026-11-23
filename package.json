@@ -1,0 +1,12 @@
+{
+  "name": "cleardebt-agenda",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/local.mjs",
+    "start": "node scripts/local.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test"
+  }
+}

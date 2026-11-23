@@ -1,0 +1,5 @@
+.local/
+*.xlsx
+respaldo*.json
+test/
+scripts/from_excel.py

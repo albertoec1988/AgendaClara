@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#173d37"><title>Mi semana · ClearDebt</title>
+  <link rel="icon" type="image/svg+xml" href="./brand.svg"><link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="layout">
+    <aside id="rail"></aside>
+    <div class="workspace">
+      <header class="top"><button id="menu" class="iconbtn mobile" aria-label="Abrir navegación">☰</button><div class="crumb">Mi planificación <span>/</span> <strong id="crumb">Mi semana</strong></div><button class="save-status" id="save" title="Estado del guardado" aria-live="polite"></button></header>
+      <main id="main" tabindex="-1"><p class="loading">Cargando tu agenda…</p></main>
+    </div>
+  </div>
+  <dialog id="editor"><div id="dialog-content"></div></dialog>
+  <div id="notice" role="status" aria-live="polite"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
