@@ -49,11 +49,23 @@ export function validate(p) {
   for(const [m,t] of Object.entries(p.priorities))check(ms.has(m)&&object(t)&&maybe(t.card,id=>ids.has(id))&&maybe(t.cap),'Prioridad mensual inválida.');
   const payments=p.payments===undefined?[]:p.payments;
   check(Array.isArray(payments),'Registro de pagos inválido.');
+  const accounts=p.debitAccounts??[],deposits=p.deposits??[];
+  check(Array.isArray(accounts)&&accounts.length<=30&&Array.isArray(deposits),'Cuentas de débito inválidas.');
+  const accountIds=new Set(accounts.map(a=>a.id));
+  check(accountIds.size===accounts.length,'Hay cuentas de débito repetidas.');
+  check(p.incomeAccount==null||accountIds.has(p.incomeAccount),'Cuenta receptora del ingreso inválida.');
+  for(const a of accounts)check(ident(a.id)&&name(a.name)&&maybe(a.balance)&&Array.isArray(a.included)&&a.included.every(id=>typeof id==='string'),'Revisa la cuenta de débito.');
+  const depositIds=new Set();
+  for(const d of deposits){
+    check(ident(d.id)&&!depositIds.has(d.id)&&accountIds.has(d.account)&&isDate(d.date)&&amount(d.amount)&&d.amount>0&&['ach','variable'].includes(d.kind),'Depósito inválido.');
+    depositIds.add(d.id);
+  }
   const paymentIds=new Set();
   for(const entry of payments){
     check(object(entry)&&ident(entry.id)&&!paymentIds.has(entry.id)&&ids.has(entry.card)&&ms.has(entry.period)
       &&isDate(entry.date)&&entry.date>=p.start&&entry.date<p.end&&amount(entry.amount)&&entry.amount>0
-      &&['debt','food'].includes(entry.source)&&['sent','credited'].includes(entry.status),'Revisa la tarjeta, la fecha, el importe y el estado del envío.');
+      &&['debt','food'].includes(entry.source)&&['sent','credited'].includes(entry.status)
+      &&(entry.account==null||accountIds.has(entry.account)),'Revisa la tarjeta, la fecha, el importe y el estado del envío.');
     paymentIds.add(entry.id);
   }
   return p;
@@ -85,6 +97,15 @@ export function cardProgress(plan,cardId) {
   const credited=total(payments.filter(p=>p.status==='credited'),'amount');
   const transit=total(payments.filter(p=>p.status==='sent'),'amount');
   return {credited,transit,remaining:positive(card.balance-credited)};
+}
+export function debitProgress(plan,accountId) {
+  const account=(plan.debitAccounts??[]).find(a=>a.id===accountId);
+  if(!account)return null;
+  const included=new Set(account.included);
+  const deposits=(plan.deposits??[]).filter(d=>d.account===accountId&&!included.has('d:'+d.id));
+  const payments=(plan.payments??[]).filter(p=>p.account===accountId&&!included.has('p:'+p.id));
+  const income=total(deposits,'amount'),out=total(payments,'amount');
+  return {income,out,balance:account.balance==null?null:account.balance+income-out};
 }
 export function compute(p) {
   const s=p.settings, weeks=[], statements=[], months=[], days=[], byDate=new Map(), byWeek=new Map();

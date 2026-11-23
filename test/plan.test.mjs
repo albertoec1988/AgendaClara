@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {blankPlan,compute,cardProgress,validate,dates,addDays} from '../web/model.js';
+import {blankPlan,compute,cardProgress,debitProgress,validate,dates,addDays} from '../web/model.js';
 
 function sample(){
   const p=blankPlan();p.start='2028-01-21';p.end='2028-04-01';
@@ -90,4 +90,15 @@ test('Tarjetas descuenta solo los pagos acreditados desde el saldo de referencia
   p.payments[0].status='credited';
   assert.deepEqual(cardProgress(p,'c2'),{credited:6500,transit:0,remaining:173500});
   assert.equal(cardProgress(p,'c1').remaining,150000);
+});
+test('el saldo observado de débito incorpora movimientos posteriores una sola vez',()=>{
+  const p=sample();
+  p.debitAccounts=[{id:'a1',name:'PNC',balance:99100,included:['p:p1']}];
+  p.payments=[payment({account:'a1',amount:84000,status:'credited'})];
+  p.deposits=[{id:'d1',account:'a1',kind:'ach',date:'2028-02-09',amount:130000}];
+  assert.deepEqual(debitProgress(validate(p),'a1'),{income:130000,out:0,balance:229100});
+  p.payments.push(payment({id:'p2',account:'a1',amount:10000,date:'2028-02-10'}));
+  assert.deepEqual(debitProgress(validate(p),'a1'),{income:130000,out:10000,balance:219100});
+  p.incomeAccount='a1';assert.equal(validate(p).incomeAccount,'a1');
+  p.incomeAccount='ausente';assert.throws(()=>validate(p));
 });
