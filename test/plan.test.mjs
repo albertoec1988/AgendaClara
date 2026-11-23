@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {blankPlan,compute,validate,dates,addDays} from '../web/model.js';
+import {blankPlan,compute,cardProgress,validate,dates,addDays} from '../web/model.js';
 
 function sample(){
   const p=blankPlan();p.start='2028-01-21';p.end='2028-04-01';
@@ -82,4 +82,12 @@ test('el mes inicial admite abonos sin mínimo y una fecha de envío única por 
     assert.throws(()=>validate({...p,payments:[payment(invalid)]}));
   }
   assert.throws(()=>validate({...p,payments:[payment(),payment()]}));
+});
+test('Tarjetas descuenta solo los pagos acreditados desde el saldo de referencia',()=>{
+  const p=sample();
+  p.payments=[payment({amount:2500}),payment({id:'p2',amount:4000,status:'credited',date:'2028-02-09'})];
+  assert.deepEqual(cardProgress(p,'c2'),{credited:4000,transit:2500,remaining:176000});
+  p.payments[0].status='credited';
+  assert.deepEqual(cardProgress(p,'c2'),{credited:6500,transit:0,remaining:173500});
+  assert.equal(cardProgress(p,'c1').remaining,150000);
 });

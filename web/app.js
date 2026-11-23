@@ -1,4 +1,4 @@
-import {validate,compute,blankPlan,fields,addDays,monday,monthOf,dates,weekday} from './model.js';
+import {validate,compute,blankPlan,cardProgress,fields,addDays,monday,monthOf,dates,weekday} from './model.js';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usd=(v,digits=2)=>v==null?'Pendiente':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:digits,maximumFractionDigits:digits}).format(v/100);
@@ -147,7 +147,10 @@ function otherPage(){
     body=panel('Facturas del mes',table(['Factura','Día habitual','Importe previsto',''],plan.bills.map(b=>[esc(b.name),b.day?'Día '+b.day:'Distribuido por viernes',b.amounts[month]!=null?usd(b.amounts[month]):'Por completar',editBtn('bill',b.id)])),'<button class="smallbtn" data-action="newbill">'+icon('plus',15)+' Añadir factura</button>')+
       '<div class="summaryline"><span>Presupuesto de servicios del mes</span><b>'+usd(m.billBudget)+'</b></div>';
   }else if(view==='cards'){
-    body='<div class="cardgrid">'+plan.cards.map((c,i)=>'<article class="panel bank"><div class="banktop"><span class="bankicon tone'+(i%4)+'">'+icon('card',23)+'</span>'+editBtn('card',c.id)+'</div><h2>'+esc(c.name)+'</h2><strong>'+usd(c.balance)+'</strong><p>Saldo de referencia</p><dl><div><dt>APR de compras</dt><dd>'+(c.apr==null?'Pendiente':(c.apr/100).toFixed(2)+' %')+'</dd></div><div><dt>Mínimo inicial</dt><dd>'+usd(c.minimum)+'</dd></div></dl></article>').join('')+'</div>';control='<button class="primary" data-action="newcard">'+icon('plus',16)+' Añadir tarjeta</button>';
+    body='<p class="footnote">El saldo restante es una estimación a partir del saldo de referencia y los envíos acreditados registrados en esta agenda. Compras, intereses y comisiones posteriores requieren actualizar el saldo de referencia.</p><div class="cardgrid">'+plan.cards.map((c,i)=>{
+      const progress=cardProgress(plan,c.id);
+      return '<article class="panel bank"><div class="banktop"><span class="bankicon tone'+(i%4)+'">'+icon('card',23)+'</span>'+editBtn('card',c.id)+'</div><h2>'+esc(c.name)+'</h2><strong>'+usd(progress.remaining)+'</strong><p>Saldo restante estimado</p><dl><div><dt>Saldo de referencia</dt><dd>'+usd(c.balance)+'</dd></div><div><dt>Pagos acreditados</dt><dd>'+usd(progress.credited)+'</dd></div><div><dt>En tránsito</dt><dd>'+usd(progress.transit)+'</dd></div><div><dt>APR de compras</dt><dd>'+(c.apr==null?'Pendiente':(c.apr/100).toFixed(2)+' %')+'</dd></div><div><dt>Mínimo inicial</dt><dd>'+usd(c.minimum)+'</dd></div></dl></article>';
+    }).join('')+'</div>';control='<button class="primary" data-action="newcard">'+icon('plus',16)+' Añadir tarjeta</button>';
   }else{
     const sends=view==='sends';body=panel(sends?'Pagos por enviar':'Estados del mes',table(sends?['Tarjeta','Enviar el','Vence','Mínimo','Desde comida','Enviar desde deuda','Estado','']:['Tarjeta','Vence','Mínimo','Acreditado','Interés del estado','Saldo de cierre','Estado',''],m.statements.map(a=>sends?[esc(a.card.name),short(a.send),short(a.due),usd(a.minimum),usd(a.fromFood),a.minimum==null||a.pending==null?'Pendiente':usd(a.pending),tag(a.status,a.confirmed?'':'warn'),editBtn('statement',a.id)]:[esc(a.card.name),short(a.due),usd(a.minimum),usd(a.paid),usd(a.st.interest),usd(a.st.balance),tag(a.status,a.confirmed?'':'warn'),editBtn('statement',a.id)]),'Este mes inicial solo incluye apartados. Los estados comienzan el mes siguiente.'));
     if(sends)body+=panel('Abono adicional','<div class="summaryline"><span>'+esc(m.card?.name??'Elige una tarjeta')+'</span><b>'+usd(m.extra)+'</b></div><p class="footnote">'+(m.margin<=0?'El flujo proyectado necesita ese efectivo para los próximos vencimientos.':m.missing?'Completa los mínimos y fechas del mes antes de enviar el extra.':'Revisa el saldo y el APR vigente antes de pagar.')+'</p>',editBtn('priority','',month));
@@ -214,7 +217,7 @@ function editor(kind,id='',m=month){
   const cardOptions=plan.cards.map(c=>[c.id,c.name]);
   if(kind==='budget'){heading=fields[id];hint='Este importe se utiliza para recalcular el calendario.';field('Importe en USD','money',['settings',id]);if(id==='food')field('Pagar comestibles con','choice',['foodCard'],{optional:true,options:cardOptions});}
   if(kind==='card'&&card){heading='Editar tarjeta';hint=card.name;const f=(n,t,k,o={})=>field(n,t,['cards',ci,k],o);
-    f('Nombre','text','name');f('Saldo de referencia · USD','money','balance');f('APR de compras · %','pct','apr',{optional:true});
+    f('Nombre','text','name');f('Saldo de referencia · USD','money','balance',{help:'Base para calcular el saldo restante. Si registras un saldo bancario nuevo, revisa los pagos ya acreditados para evitar descontarlos dos veces.'});f('APR de compras · %','pct','apr',{optional:true});
     f('Mínimo del primer estado · USD','money','minimum',{optional:true});f('Día de vencimiento inicial','day','dueDay',{optional:true});
   }
   if(kind==='bill'&&bill){heading='Editar factura';hint=monthText(m);field('Nombre','text',['bills',bi,'name']);field('Día habitual de pago','day',['bills',bi,'day'],{optional:true,help:'Vacío para distribuir el importe entre los viernes.'});field('Importe de este mes · USD','money',['bills',bi,'amounts',m],{optional:true});}

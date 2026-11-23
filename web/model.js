@@ -78,6 +78,14 @@ export function blankPlan() {
   const end=new Date(Date.UTC(+start.slice(0,4),+start.slice(5,7)+6,1)).toISOString().slice(0,10);
   return {version:1,start,end,settings:Object.fromEntries(Object.keys(fields).map(k=>[k,0])),cards:[],foodCard:null,bills:[],statements:{},priorities:{},weeks:dates(start,addDays(end,-1),7).map(date=>({date,base:null,override:null,billsOverride:null}))};
 }
+export function cardProgress(plan,cardId) {
+  const card=plan.cards.find(c=>c.id===cardId);
+  if(!card)return null;
+  const payments=(plan.payments??[]).filter(p=>p.card===cardId);
+  const credited=total(payments.filter(p=>p.status==='credited'),'amount');
+  const transit=total(payments.filter(p=>p.status==='sent'),'amount');
+  return {credited,transit,remaining:positive(card.balance-credited)};
+}
 export function compute(p) {
   const s=p.settings, weeks=[], statements=[], months=[], days=[], byDate=new Map(), byWeek=new Map();
   const period=dates(p.start,addDays(p.end,-1)), keys=[...new Set(period.map(monthOf))];
