@@ -125,3 +125,9 @@ test('la caja diaria se ancla a los saldos observados y aplica solo movimientos 
   assert.equal(model.byDate.get('2028-01-21').cash,329100);
   assert.equal(model.byDate.get('2028-01-28').cash,479100);
 });
+test('una factura de renta fechada sustituye la renta mensual y no duplica el cargo',()=>{
+  const p=sample();
+  p.bills.push({id:'rent',name:'RENTA',day:1,amounts:{'2028-02':160000,'2028-03':160000}});
+  const day=compute(validate(p)).byDate.get('2028-02-01');
+  assert.deepEqual(day.events.filter(e=>e.type==='rent'||e.type==='bill').map(e=>[e.type,e.label,e.value]),[['bill','RENTA',160000]]);
+});

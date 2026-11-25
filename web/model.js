@@ -207,7 +207,14 @@ export function compute(p) {
     const m=months.find(x=>x.key===monthOf(date)), w=byWeek.get(date), events=[];
     const ev=(type,label,value,reference={},note='')=>{if(value>0)events.push({type,label,value,...reference,note});};
     if(w)ev('income','Cobro semanal',w.income,{tab:'fridays',id:date},'Ingreso previsto');
-    if(dayOf(date)===1)ev('rent','Renta',s.rent,{tab:'budget',id:'rent'},'Vivienda');
+    // Renta tiene dos posibles fuentes: el importe mensual del presupuesto o
+    // una factura fechada. Si existe una factura de renta/vivienda ese día,
+    // la factura es la única fuente para evitar cobrarla dos veces.
+    const datedRent = m && p.bills.some(b => {
+      const label = String(b.name ?? '').trim().toLowerCase();
+      return b.day && inMonth(m.key,b.day)===date && /renta|vivienda/.test(label) && (b.amounts[m.key]??0)>0;
+    });
+    if(dayOf(date)===1 && !datedRent)ev('rent','Renta',s.rent,{tab:'budget',id:'rent'},'Vivienda');
     if(m) for(const b of p.bills)if(b.day&&inMonth(m.key,b.day)===date)ev('bill',b.name,b.amounts[m.key],{tab:'bills',id:b.id,month:m.key},'Factura del mes');
     if(w){ev('undated','Gastos sin fecha',w.undated,{tab:'bills',month:m.key},'Apartado semanal');
       const replaced=Math.min(w.food,ledger.foodByMonth.get(m.key)??0);
