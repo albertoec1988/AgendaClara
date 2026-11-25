@@ -326,7 +326,8 @@ function editor(kind,id='',m=month){
       el='<input id="fld'+i+'" data-field="'+i+'" '+at+' value="'+esc(v)+'" '+(!f.optional?'required':'')+' placeholder="'+(f.optional?'Pendiente':'')+'">';}
     return '<label class="formfield" for="fld'+i+'"><span>'+esc(f.label)+'</span>'+el+(f.help?'<small>'+esc(f.help)+'</small>':'')+'</label>';
   }).join('');
-  openDialog(dialogTitle(heading,hint)+'<div class="editform">'+fieldHtml+'<p class="formerror" id="formerror" role="alert"></p></div><div class="dialogfoot"><span>'+icon('cloud',15)+' Guardado automático</span><button class="primary" data-action="done">Listo</button></div>');
+  const removeBill=kind==='bill'&&bill?'<button class="danger" data-action="deletebill" data-id="'+esc(id)+'">Eliminar factura</button>':'';
+  openDialog(dialogTitle(heading,hint)+'<div class="editform">'+fieldHtml+'<p class="formerror" id="formerror" role="alert"></p></div><div class="dialogfoot"><span>'+icon('cloud',15)+' Guardado automático</span>'+removeBill+'<button class="primary" data-action="done">Listo</button></div>');
 }
 function editInput(el){
   const f=bindings[Number(el.dataset.field)];if(!f)return false;
@@ -411,6 +412,13 @@ document.addEventListener('click',e=>{
     case 'done':finish();break;
     case 'backup':backup();break;
     case 'newbill':{const id='b'+crypto.randomUUID();plan.bills.push({id,name:'Nueva factura',day:null,amounts:{}});changed();editor('bill',id);break;}
+    case 'deletebill':{
+      const id=t.dataset.id,bill=plan.bills.find(b=>b.id===id);
+      if(!bill||!confirm('¿Eliminar la factura "'+bill.name+'"? Esta acción no se puede deshacer.'))break;
+      const next={...plan,bills:plan.bills.filter(b=>b.id!==id)};
+      try{validate(next);plan=next;changed();void flush();dialog.close();activeEditor=null;bindings=[];notice('Factura eliminada.');draw();}catch(error){const message=$('formerror');if(message)message.textContent=error.message;}
+      break;
+    }
     case 'newcard':{const id='c'+crypto.randomUUID();plan.cards.push({id,name:'Nueva tarjeta',balance:0,apr:null,minimum:null,dueDay:null});changed();editor('card',id);break;}
     case 'export':{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(plan,null,2)],{type:'application/json'}));a.href=url;a.download='respaldo-agenda-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);break;}
     case 'restore':if(imported&&!conflict){plan=imported;model=compute(plan);setSelections();dialog.close();imported=null;changed();void flush();}break;

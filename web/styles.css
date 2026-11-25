@@ -18,6 +18,7 @@ dialog{border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 70px #0
 .remove-payment button{margin-top:8px;color:#873e28}
 .use-minimum{margin:-4px 0 12px;padding:0}
 .use-minimum[hidden]{display:none}
+.danger{color:#9b321f;background:#fff1ec;border:1px solid #efc6b8}
 @media(max-width:650px){
   .tablewrap{overflow:visible}.tablewrap table,.tablewrap tbody{display:block;white-space:normal}
   .tablewrap thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
