@@ -13,6 +13,8 @@ export function dates(first,last,step=1) {
 }
 const total = (a,key) => a.reduce((s,x)=>s+(x[key]??0),0);
 const positive = n => Math.max(0,n);
+const billLabel = b => String(b?.name ?? '').trim().toLowerCase();
+const isFoodBill = b => /comida|comestible|mercado|grocer/.test(billLabel(b));
 export const fields = {
   opening:'Efectivo inicial', income:'Cobro habitual del viernes',rent:'Renta mensual',bills:'Presupuesto de servicios',
   food:'Comestibles mensuales', goal:'Meta mensual de pagos', decTarget:'Aporte del primer mes completo',
@@ -133,8 +135,13 @@ export function compute(p) {
     const list=p.weeks.filter(w=>monthOf(w.date)===key), count=list.length;
     const itemized=p.bills.reduce((sum,b)=>sum+(b.amounts[key]??0),0);
     const dated=p.bills.reduce((sum,b)=>sum+(b.day?b.amounts[key]??0:0),0);
-    const billBudget=Math.max(mi?s.bills:s.firstBills,itemized),food=mi?s.food:s.firstFood;
-    const month={key,billBudget,dated,food,weeks:[],statements:[],income:0,rent:0,bills:0,debt:0,min:0,extra:0,missing:0};
+    const billBudget=Math.max(mi?s.bills:s.firstBills,itemized);
+    const foodBudget=mi?s.food:s.firstFood;
+    const foodDated=p.bills.reduce((sum,b)=>sum+(isFoodBill(b)?(b.amounts[key]??0):0),0);
+    // El presupuesto de comida es una referencia. Las facturas COMIDA/MERCADO
+    // fechadas lo cubren primero; solo se proyecta la parte aún no desglosada.
+    const food=Math.max(0,foodBudget-foodDated);
+    const month={key,billBudget,dated,food,foodBudget,foodDated,weeks:[],statements:[],income:0,rent:0,bills:0,debt:0,min:0,extra:0,missing:0};
     // The statement can fall in the first days of the month, with funding the Friday before.
     let foodRemaining=food;
     for(const [i,base] of list.entries()){
@@ -211,8 +218,7 @@ export function compute(p) {
     // una factura fechada. Si existe una factura de renta/vivienda ese día,
     // la factura es la única fuente para evitar cobrarla dos veces.
     const datedRent = m && p.bills.some(b => {
-      const label = String(b.name ?? '').trim().toLowerCase();
-      return b.day && inMonth(m.key,b.day)===date && /renta|vivienda/.test(label) && (b.amounts[m.key]??0)>0;
+      return b.day && inMonth(m.key,b.day)===date && /renta|vivienda/.test(billLabel(b)) && (b.amounts[m.key]??0)>0;
     });
     if(dayOf(date)===1 && !datedRent)ev('rent','Renta',s.rent,{tab:'budget',id:'rent'},'Vivienda');
     if(m) for(const b of p.bills)if(b.day&&inMonth(m.key,b.day)===date)ev('bill',b.name,b.amounts[m.key],{tab:'bills',id:b.id,month:m.key},'Factura del mes');

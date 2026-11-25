@@ -131,3 +131,10 @@ test('una factura de renta fechada sustituye la renta mensual y no duplica el ca
   const day=compute(validate(p)).byDate.get('2028-02-01');
   assert.deepEqual(day.events.filter(e=>e.type==='rent'||e.type==='bill').map(e=>[e.type,e.label,e.value]),[['bill','RENTA',160000]]);
 });
+test('las facturas de comida cubren primero el presupuesto ilustrativo',()=>{
+  const p=sample();
+  p.settings.food=100000;p.bills.push({id:'food-fixed',name:'COMIDA 1',day:5,amounts:{'2028-02':100000,'2028-03':100000}});
+  const m=compute(validate(p)),feb=m.months.find(x=>x.key==='2028-02');
+  assert.equal(feb.food,0);
+  assert.equal(m.byDate.get('2028-02-05').events.filter(e=>e.type==='food').length,0);
+});
